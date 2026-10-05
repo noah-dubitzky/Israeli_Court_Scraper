@@ -1,0 +1,52 @@
+[
+  {
+    "description": "הוראה למשיב 1 להגיש הפקדת ערבות",
+    "signed_at": "18/09/2010 21:52:17",
+    "signed_by": "רים נדאף",
+    "decision_id": 73076964,
+    "document_id": 100414332,
+    "is_idc_published": true,
+    "summary_document_id": 0,
+    "is_summary_idc_published": false,
+    "is_canceled": false,
+    "details": {
+      "decision_name": "הוראה למשיב 1 להגיש הפקדת ערבות",
+      "document_name": "הוראה למשיב 1 להגיש הפקדת ערבות",
+      "given_by": "רים נדאף",
+      "signature_date": "18/09/2010",
+      "description": "",
+      "confidentiality": "פתוח לציבור",
+      "decision_type": "החלטה",
+      "given_ex_parte": false,
+      "release_to_other_side": false,
+      "show_in_selected_decisions": false,
+      "is_substantive": false,
+      "is_technical": true
+    }
+  },
+  {
+    "description": "החלטה  מתאריך  29/09/10  שניתנה ע\"י  רים נדאף",
+    "signed_at": "29/09/2010 12:02:56",
+    "signed_by": "רים נדאף",
+    "decision_id": 73161497,
+    "document_id": 100875185,
+    "is_idc_published": true,
+    "summary_document_id": 0,
+    "is_summary_idc_published": false,
+    "is_canceled": false,
+    "details": {
+      "decision_name": "החלטה  מתאריך  29/09/10  שניתנה ע\"י  רים נדאף",
+      "document_name": "החלטה  מתאריך  29/09/10  שניתנה ע\"י  רים נדאף",
+      "given_by": "רים נדאף",
+      "signature_date": "29/09/2010",
+      "description": "",
+      "confidentiality": "פתוח לציבור",
+      "decision_type": "החלטה",
+      "given_ex_parte": false,
+      "release_to_other_side": false,
+      "show_in_selected_decisions": false,
+      "is_substantive": false,
+      "is_technical": true
+    }
+  }
+]

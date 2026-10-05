@@ -1,0 +1,6 @@
+HOME_URL = "https://www.court.gov.il/NGCS.Web.Site/HomePage.aspx"
+
+DEFAULT_SEARCH_DATE = "06/09/2026"
+
+PAGE_TIMEOUT = 120000
+ELEMENT_TIMEOUT = 30000

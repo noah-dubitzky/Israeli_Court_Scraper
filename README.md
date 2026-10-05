@@ -1,0 +1,138 @@
+# Case Scraper
+
+`main.py` runs a browser-based scraper for Israel's court website. It searches cases by opening date, optionally filters by case type, collects each case's details, and saves progress to a JSON file.
+
+## Setup
+
+Use Python 3.10 or newer. From PowerShell, open the project directory and install Playwright and its Chromium browser:
+
+```powershell
+cd C:\Users\noahd\OneDrive\Desktop\Case_Scraper
+python -m pip install playwright
+python -m playwright install chromium
+```
+
+An internet connection and access to the court website are required.
+
+## Run the scraper
+
+```powershell
+python main.py
+```
+
+The script prompts for:
+
+1. **Search date:** enter `DD/MM/YYYY`, or press Enter to use `DEFAULT_SEARCH_DATE` from `config.py` (currently `06/09/2026`).
+2. **Case-type filter:** enter `10078` for תה״ג or `10071` for ת״כ, or press Enter for no filter.
+3. **Maximum cases:** enter a positive integer, or press Enter to extract all matching cases.
+
+Chromium opens in a visible window by default. Progress, individual case results, and final status counts appear in the terminal.
+
+### Command-line options
+
+| Option | Purpose | Default |
+| --- | --- | --- |
+| `--date DD/MM/YYYY` | Set the case-opening date to search. | Prompt for a date. |
+| `--case-type-id INTEGER` | Filter using the website's case-type option value. | Prompt; blank means no filter. |
+| `--max-cases INTEGER` | Limit both result collection and detail lookups. Must be positive. | Prompt; blank means all cases. |
+| `--output PATH` | Choose the JSON output file. | Timestamped file under `output/`. |
+| `--headless` | Run Chromium without a visible window. | Visible browser. |
+
+For example, search a date and extract up to five cases:
+
+```powershell
+python main.py --date 06/09/2026 --max-cases 5
+```
+
+This still prompts for the case-type filter. Press Enter to search without a filter.
+
+To set every search option and choose an output file:
+
+```powershell
+python main.py --date 06/09/2026 --case-type-id 10071 --max-cases 5 --output output/results.json --headless
+```
+
+Choose one of these case-type filter values:
+
+| Case type | Filter integer |
+| --- | --- |
+| תה״ג | `10078` |
+| ת״כ | `10071` |
+
+The example above uses ת״כ (`10071`). Use `--case-type-id 10078` for תה״ג. `--headless` hides the browser but does not suppress prompts for omitted search options. An invalid date also triggers a correction prompt.
+
+## What main.py does
+
+1. Reads command-line arguments and prompts for missing search settings.
+2. Launches Chromium with Playwright and creates a browser context.
+3. Calls `open_results_page()` and `populate_cases()` from `court_search.py` to search and collect case records.
+4. Saves an initial checkpoint with all collected cases marked `pending`.
+5. Processes cases sequentially. For each case, it marks the entry `in_progress`, opens the case folder, and calls `GetCaseDetails()` from `case_details.py`.
+6. Saves the extracted data and status, closes that case's page, and continues to the next case even if a detail lookup fails.
+7. Records the finish time, saves the final checkpoint, prints status counts and the output location, and closes the browser.
+
+The detail scraper attempts to collect these tabs:
+
+- General details (`general_details`)
+- Parties (`sides`)
+- Representatives / power of attorney (`power_of_attorney`)
+- Hearing dates (`discussion_dates`)
+- Decisions (`decisions`)
+- Judgments (`judgments`)
+- Related cases (`related_cases`)
+
+Unavailable tabs can be skipped, so some cases may have partial results.
+
+## Saved results
+
+By default, results are saved relative to the directory where you run the command:
+
+```text
+output/cases_YYYYMMDD_HHMMSS_microseconds.json
+```
+
+The JSON contains `started_at`, `search_date`, `case_type_id`, and a `cases` list. A normally finished run also has `finished_at`. Run timestamps are stored in UTC; the default filename uses local time.
+
+Each entry in `cases` contains:
+
+- `status`: the extraction status described below.
+- `error`: `null`, or an exception type and message when extraction fails.
+- `case`: the case type, number, name, interest, court, case status, internal `ID`, and extracted `details.tabs`.
+- `missing_tabs`: tab keys that were not collected, when the detail call returns normally.
+
+The entry's extraction `status` is separate from the court's case status stored inside `case.status`.
+
+| Extraction status | Meaning |
+| --- | --- |
+| `pending` | Collected from search results but not yet processed. |
+| `in_progress` | Detail extraction started; an interrupted attempt may retain this status. |
+| `completed` | All expected tab keys were collected. |
+| `partial` | Extraction returned, but one or more expected tabs were missing. |
+| `failed` | Opening the folder or extracting details raised an exception. Previously collected details are retained. |
+
+`completed` indicates that all expected tabs are present; it does not guarantee that every tab contains records.
+
+The checkpoint is updated before and after each case. `save_checkpoint()` writes a temporary `.tmp` file and then replaces the JSON file after the write finishes. Output directories are created automatically. If you specify an existing output filename, its contents are replaced.
+
+Saved checkpoints preserve progress for inspection, but the script does **not** automatically resume or retry a previous run. Errors during the initial search or checkpoint writes can stop the run.
+
+## Main supporting files
+
+| File | Responsibility |
+| --- | --- |
+| `main.py` | Command-line interface, browser lifecycle, sequential extraction, and JSON checkpoints. |
+| `court_search.py` | Court website navigation, search filters, and case-result collection. |
+| `case_details.py` | Opens case folders and scrapes individual detail tabs. |
+| `grid_reader.py` | Reads paginated website grids. |
+| `case.py` | Defines the case data structure. |
+| `config.py` | Website URL, default search date, and browser-operation timeouts. |
+
+`main.py` saves to JSON; it does not write to the database defined under `sql/`.
+
+## Offline pipeline checks
+
+```powershell
+python -m unittest tests.test_pipeline
+```
+
+These checks use mocked browser operations to verify pipeline behavior without contacting the court website.
