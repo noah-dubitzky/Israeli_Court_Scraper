@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 from playwright.async_api import Locator, Page, TimeoutError as PlaywrightTimeoutError, expect
 
 from case import case

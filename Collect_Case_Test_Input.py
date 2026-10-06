@@ -1,5 +1,7 @@
 """Collect all case-search summaries for one random day in the last ten years."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import random

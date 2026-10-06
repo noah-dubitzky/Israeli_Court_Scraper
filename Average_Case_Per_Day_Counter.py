@@ -1,5 +1,7 @@
 """Count cases on 100 random completed days from the last ten years."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import random

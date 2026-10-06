@@ -1,5 +1,7 @@
 """Search cases, enrich them sequentially, and checkpoint results to JSON."""
 
+from __future__ import annotations
+
 import argparse
 import asyncio
 import json

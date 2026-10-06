@@ -1,5 +1,7 @@
 """Search-only run with fixed settings: python tests/test_search_range.py."""
 
+from __future__ import annotations
+
 import asyncio
 import json
 import re
