@@ -116,6 +116,79 @@ The checkpoint is updated before and after each case. `save_checkpoint()` writes
 
 Saved checkpoints preserve progress for inspection, but the script does **not** automatically resume or retry a previous run. Errors during the initial search or checkpoint writes can stop the run.
 
+## Average cases per day
+
+```powershell
+python Average_Case_Per_Day_Counter.py
+```
+
+This samples 100 distinct random dates from the last ten years, through yesterday,
+including weekends and holidays. For example, running on October 5, 2026 samples
+from October 5, 2016 through October 4, 2026. It counts unique cases across all
+result pages without opening case details, prints each day's count, then prints
+the total and average. Zero-case days are included in the average.
+The browser stays on the same search page between dates. If the website returns
+to its homepage, the script reopens the date-search menu and retries the same date.
+
+Counts and the summary are checkpointed after each day to a timestamped JSON file
+under `output/`. The timer measures the full counting phase, including searches,
+retries, and intermediate checkpoint writes. Elapsed seconds are saved as
+`elapsed_seconds` and printed at the end in hours, minutes, and seconds.
+Searches are retried up to three times. Failed days are recorded
+separately and excluded from the average; an incomplete run exits with status 1.
+
+Optional flags: `--seed 42` to reproduce the sample on the same run date,
+`--case-type-id INTEGER` to filter cases, `--output PATH` to choose the JSON file,
+and `--headless` to hide the browser. Without a case-type filter, all types are counted.
+
+## Per-case time and storage measurements
+
+First generate the input from one random completed day in the last ten years:
+
+```powershell
+python Collect_Case_Test_Input.py
+```
+
+This collects all unique case rows across every result page, including case type,
+number, name, interest, court, status, and internal ID. It replaces
+`Case_Test_Output.json` after successful collection and prints pagination progress.
+Failed searches retry the same date up to three times and preserve the old input
+if collection fails. Use `--headless`, `--seed INTEGER`, or `--output PATH` as needed.
+If the selected date has too few cases, rerun for another date or reduce the
+consumption script's sample size.
+
+```powershell
+python Average_Comsumption_Per_Case_Finder.py
+```
+
+Enter the number of cases to extract, or press Enter for 10. The script randomly
+selects unique records from `Case_Test_Output.json`, opens each case, and runs all
+implemented detail-tab extractors. The input must contain at least as many unique
+cases as the requested sample size.
+
+The input can be a list of case-number strings, an object containing a `cases`
+list of case records, or an existing `main.py` output. For example:
+
+```json
+{"cases": ["12345-09-26", "67890-09-26"]}
+```
+
+```powershell
+python Average_Comsumption_Per_Case_Finder.py --count 5 --headless
+```
+
+Each case's time includes folder lookup and detail extraction. Storage is the
+actual byte size of its UTF-8 JSON file, excluding measurement-summary overhead;
+it does not measure downloaded documents or browser storage. Results print after
+each case. Final averages include completed and partial cases and exclude failed
+attempts. Missing tabs and failures are recorded explicitly.
+
+Per-case files and `summary.json` are saved under a timestamped
+`output/case_consumption_.../` directory. Optional flags are `--input PATH`,
+`--count INTEGER` (or `-x INTEGER`), `--seed INTEGER`, `--output-dir PATH`, and
+`--headless`. Failed extractions preserve partial data and do not stop later cases;
+a run with failed cases exits with status 1.
+
 ## Main supporting files
 
 | File | Responsibility |

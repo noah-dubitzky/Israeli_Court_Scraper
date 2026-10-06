@@ -25,6 +25,13 @@ async def open_court_page(
     print("Initial URL:", page.url)
     print("Title:", await page.title())
 
+    await navigate_to_date_search(page, disable_timeouts=disable_timeouts)
+
+
+async def navigate_to_date_search(
+    page: Page, *, disable_timeouts: bool = False,
+) -> None:
+    """Open the date-search menu on the current page, without visiting home."""
     # STEP 1 — HANDLE MODAL
     await _dismiss_optional_modal(page, disable_timeouts=disable_timeouts)
 
