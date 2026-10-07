@@ -6,9 +6,53 @@ from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
 from Average_Case_Per_Day_Counter import count_date, count_days, sample_days
+from case import case
+from main import save_checkpoint
 
 
 class CounterTests(unittest.IsolatedAsyncioTestCase):
+    async def test_records_general_data_and_removes_daily_file(self):
+        page = MagicMock(url="https://www.court.gov.il/NGCS.Web.Site/SearchCase/CasesSearchView.aspx")
+        item = case("type", "123", "שם", "interest", "court", "status", "42",
+                    details={"unused": "detail"})
+        captured = []
+
+        def record(path, data):
+            save_checkpoint(path, data)
+            captured.append((path, json.loads(path.read_text(encoding="utf-8"))))
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "Average_Case_Per_Day_Counter.search_cases_on_page", new=AsyncMock()
+        ), patch("Average_Case_Per_Day_Counter.populate_cases",
+                 new=AsyncMock(return_value=[item])), patch(
+            "Average_Case_Per_Day_Counter.save_checkpoint", side_effect=record
+        ):
+            self.assertEqual(await count_date(page, "01/01/2026", None, Path(directory)), 1)
+            path, data = captured[0]
+            self.assertEqual(data["search_date"], "01/01/2026")
+            self.assertEqual(data["cases"], [{
+                "type": "type", "number": "123", "name": "שם", "interest": "interest",
+                "court": "court", "status": "status", "ID": "42",
+            }])
+            self.assertFalse(path.exists())
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
+    async def test_removes_partial_file_when_recording_fails(self):
+        page = MagicMock(url="https://www.court.gov.il/NGCS.Web.Site/SearchCase/CasesSearchView.aspx")
+
+        def fail(path, data):
+            path.with_name(path.name + ".tmp").write_text("partial", encoding="utf-8")
+            raise OSError("disk full")
+
+        with tempfile.TemporaryDirectory() as directory, patch(
+            "Average_Case_Per_Day_Counter.search_cases_on_page", new=AsyncMock()
+        ), patch("Average_Case_Per_Day_Counter.populate_cases", new=AsyncMock(return_value=[])), patch(
+            "Average_Case_Per_Day_Counter.save_checkpoint", side_effect=fail
+        ):
+            with self.assertRaisesRegex(OSError, "disk full"):
+                await count_date(page, "01/01/2026", None, Path(directory))
+            self.assertEqual(list(Path(directory).iterdir()), [])
+
     def test_sample_is_unique_reproducible_and_within_ten_years(self):
         today = date(2026, 10, 5)
         days = sample_days(today, seed=42)
@@ -29,11 +73,14 @@ class CounterTests(unittest.IsolatedAsyncioTestCase):
                              RuntimeError("offline"), RuntimeError("offline")]
             )
         ), patch("Average_Case_Per_Day_Counter.populate_cases", new=AsyncMock(
-            side_effect=[[object(), object(), object(), object()], []]
+            side_effect=[[case("type", str(n), "name", "interest", "court", "status", str(n))
+                          for n in range(4)], []]
         )):
             output = Path(directory) / "counts.json"
             result = await count_days(context, days, output)
             self.assertEqual(json.loads(output.read_text(encoding="utf-8")), result)
+            self.assertEqual(list(Path(directory).iterdir()), [output])
+            self.assertTrue(all(entry["elapsed_seconds"] >= 0 for entry in result["days"]))
         self.assertEqual(result["total_cases"], 4)
         self.assertEqual(result["average_cases_per_day"], 2)
         self.assertEqual(result["successful_days"], 2)

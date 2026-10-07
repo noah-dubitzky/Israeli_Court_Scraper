@@ -415,6 +415,12 @@ async def _extract_decision_details(
         "given_ex_parte": "cbOneSide",
         "release_to_other_side": "cbOpenSecondSide",
         "show_in_selected_decisions": "cbChosenDecision",
+    }.items():
+        control = area.locator(f'input[id$="_{suffix}"]')
+        # Some Details forms omit these checkboxes entirely. Missing is unknown,
+        # rather than an unchecked value, and must not block extraction.
+        details[key] = await control.is_checked(timeout=timeout) if await control.count() else None
+    for key, suffix in {
         "is_substantive": "rbCriticalDesicion",
         "is_technical": "rbTechnicalDesicion",
     }.items():
@@ -434,6 +440,7 @@ async def _extract_decisions(
         print(f"Opening Details for decision {record['decision_id']}...", flush=True)
         await _click_decision_details(page, record["decision_id"], timeout=timeout)
         record["details"] = await _extract_decision_details(page, timeout=timeout)
+        print(f"Extracted Details for decision {record['decision_id']}.", flush=True)
         await _return_to_decisions_list(page, timeout=timeout)
     return {"records": records}
 

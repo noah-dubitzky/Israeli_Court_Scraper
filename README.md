@@ -127,12 +127,18 @@ including weekends and holidays. For example, running on October 5, 2026 samples
 from October 5, 2016 through October 4, 2026. It counts unique cases across all
 result pages without opening case details, prints each day's count, then prints
 the total and average. Zero-case days are included in the average.
+For each day, it writes the general search-result data (type, number, name,
+interest, court, status, and internal ID) to a temporary JSON file on the same
+filesystem as the summary, then deletes that file before proceeding. Temporary
+records are also cleaned up if a write fails.
 The browser stays on the same search page between dates. If the website returns
 to its homepage, the script reopens the date-search menu and retries the same date.
 
 Counts and the summary are checkpointed after each day to a timestamped JSON file
-under `output/`. The timer measures the full counting phase, including searches,
-retries, and intermediate checkpoint writes. Elapsed seconds are saved as
+under `output/`. Each day's `elapsed_seconds` includes searches, retries,
+collection, JSON serialization, writing, and deleting the daily records, and is
+printed alongside its count. The overall timer also includes intermediate
+summary checkpoint writes. Elapsed seconds are saved as
 `elapsed_seconds` and printed at the end in hours, minutes, and seconds.
 Searches are retried up to three times. Failed days are recorded
 separately and excluded from the average; an incomplete run exits with status 1.

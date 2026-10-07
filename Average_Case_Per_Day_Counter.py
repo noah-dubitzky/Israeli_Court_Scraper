@@ -5,9 +5,11 @@ from __future__ import annotations
 import argparse
 import asyncio
 import random
+from dataclasses import asdict
 from datetime import date, datetime, timedelta, timezone
 from pathlib import Path
 from time import perf_counter
+from tempfile import TemporaryDirectory
 from urllib.parse import urlsplit
 
 from playwright.async_api import async_playwright
@@ -42,7 +44,8 @@ def is_search_page(page) -> bool:
     return urlsplit(page.url).path.lower().endswith("/searchcase/casessearchview.aspx")
 
 
-async def count_date(page, search_date: str, case_type_id: int | None) -> int:
+async def count_date(page, search_date: str, case_type_id: int | None,
+                     record_directory: Path | None = None) -> int:
     """Reuse search, restoring it via the menu if the site returned home."""
     if not is_search_page(page):
         if urlsplit(page.url).path.lower().endswith("/homepage.aspx"):
@@ -56,6 +59,20 @@ async def count_date(page, search_date: str, case_type_id: int | None) -> int:
     cases = await populate_cases(grid)
     if not is_search_page(page):
         raise RuntimeError("Site left the search page during collection.")
+    if record_directory is not None:
+        record_directory.mkdir(parents=True, exist_ok=True)
+    # Record on the summary's filesystem; remove partial or completed writes.
+    with TemporaryDirectory(prefix="daily_case_records_", dir=record_directory) as directory:
+        records = []
+        for item in cases:
+            record = asdict(item)
+            record.pop("details", None)
+            records.append(record)
+        save_checkpoint(Path(directory) / "cases.json", {
+            "search_date": search_date,
+            "total_cases": len(records),
+            "cases": records,
+        })
     return len(cases)
 
 
@@ -67,7 +84,8 @@ async def count_days(context, days: list[date], output: Path,
         "elapsed_seconds": 0.0,
         "seed": seed,
         "case_type_id": case_type_id,
-        "days": [{"date": day.strftime("%d/%m/%Y"), "count": None, "error": None}
+        "days": [{"date": day.strftime("%d/%m/%Y"), "count": None, "error": None,
+                  "elapsed_seconds": 0.0}
                  for day in days],
     }
     summarize(result)
@@ -76,19 +94,23 @@ async def count_days(context, days: list[date], output: Path,
     page = await context.new_page()
     try:
         for index, entry in enumerate(result["days"], 1):
+            day_started = perf_counter()
             for attempt in range(1, 4):
                 try:
-                    entry["count"] = await count_date(page, entry["date"], case_type_id)
+                    entry["count"] = await count_date(page, entry["date"], case_type_id,
+                                                      output.parent)
                     entry["error"] = None
                     break
                 except Exception as error:
                     entry["error"] = f"{type(error).__name__}: {error}"
                     print(f"{entry['date']}: attempt {attempt}/3 failed: {entry['error']}", flush=True)
+            entry["elapsed_seconds"] = perf_counter() - day_started
             summarize(result)
             result["elapsed_seconds"] = perf_counter() - started
             save_checkpoint(output, result)
             value = entry["count"] if entry["count"] is not None else "FAILED"
-            print(f"[{index}/{len(days)}] {entry['date']}: {value} cases", flush=True)
+            print(f"[{index}/{len(days)}] {entry['date']}: {value} cases "
+                  f"in {entry['elapsed_seconds']:.2f} seconds", flush=True)
     finally:
         await page.close()
     result["finished_at"] = datetime.now(timezone.utc).isoformat()

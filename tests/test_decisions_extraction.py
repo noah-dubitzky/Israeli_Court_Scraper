@@ -11,6 +11,8 @@ if __package__ in (None, ""):
 from playwright.async_api import async_playwright
 
 from case import case
+from config import ELEMENT_TIMEOUT, PAGE_TIMEOUT
+from main import save_checkpoint
 from case_details import CASE_TABS, _extract_tab_body, open_case_folder, open_case_tab
 
 
@@ -59,21 +61,24 @@ def compare_results(body: dict) -> None:
 
 async def main() -> None:
     selected_case = case(
-        type="", number="26571-09-10", name="", interest="",
+        type="", number="45026-12-19", name="", interest="",
         court="", status="", ID="",
     )
     async with async_playwright() as p:
-        browser = await p.chromium.launch(headless=False, slow_mo=500, timeout=0)
+        browser = await p.chromium.launch(headless=False, slow_mo=500, timeout=PAGE_TIMEOUT)
         try:
             context = await browser.new_context()
-            context.set_default_timeout(0)
-            context.set_default_navigation_timeout(0)
-            page = await open_case_folder(context, selected_case, disable_timeouts=True)
+            context.set_default_timeout(ELEMENT_TIMEOUT)
+            context.set_default_navigation_timeout(PAGE_TIMEOUT)
+            page = await open_case_folder(context, selected_case)
             tab = next(tab for tab in CASE_TABS if tab.folder_id == "18")
-            if not await open_case_tab(page, tab, disable_timeouts=True):
+            if not await open_case_tab(page, tab):
                 raise AssertionError("Could not open Decisions in the case.")
-            body = await _extract_tab_body(page, tab, timeout=0)
+            body = await _extract_tab_body(page, tab, timeout=ELEMENT_TIMEOUT)
             selected_case.details["tabs"] = {tab.key: {"body": body}}
+            output = Path("output") / f"decisions_{selected_case.number}.json"
+            save_checkpoint(output, {"case_number": selected_case.number, **body})
+            print(f"Extracted {len(body['records'])} decisions. Saved to: {output.resolve()}", flush=True)
             compare_results(body)
             print(f"\nPASS: both decisions and their Details match for {selected_case.number}.")
             await asyncio.to_thread(input, "\nPress ENTER to close the browser...")
