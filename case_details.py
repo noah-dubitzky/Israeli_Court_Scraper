@@ -55,8 +55,9 @@ async def GetCaseDetails(
     page: Page,
     *,
     disable_timeouts: bool = False,
+    tabs: tuple[CaseTab, ...] = CASE_TABS,
 ) -> case:
-    """Collect each tab's body into details and return the supplied case.
+    """Collect the requested tabs into details and return the supplied case.
 
     Pass the page returned by open_case_folder. The caller owns the page
     and browser lifecycle. Only tabs with implemented body extractors are
@@ -68,7 +69,7 @@ async def GetCaseDetails(
 
     tab_details = selected_case.details.setdefault("tabs", {})
 
-    for tab in CASE_TABS:
+    for tab in tabs:
         if not await open_case_tab(page, tab, disable_timeouts=disable_timeouts):
             continue
         tab_details[tab.key] = {
@@ -617,11 +618,16 @@ def split_case_number(
     return case_number, month_year
 
 
+class CaseLookupError(RuntimeError):
+    """The website returned an error instead of a case folder."""
+
+
 async def open_case_folder(
     context: BrowserContext,
     selected_case: case,
     *,
     disable_timeouts: bool = False,
+    page: Page | None = None,
 ) -> Page:
     """
     Navigate from the homepage to the date-search page and locate a case
@@ -637,7 +643,9 @@ async def open_case_folder(
         Month/year:  09-26
     """
 
-    page = await context.new_page()
+    new_page = page is None
+    if new_page:
+        page = await context.new_page()
 
     try:
         print(
@@ -645,7 +653,8 @@ async def open_case_folder(
             selected_case.number,
         )
 
-        await open_court_page(page, disable_timeouts=disable_timeouts)
+        if new_page:
+            await open_court_page(page, disable_timeouts=disable_timeouts)
         print("URL after opening:", page.url)
 
         case_number, month_year = (
@@ -658,21 +667,18 @@ async def open_case_folder(
         print("Month/year:", month_year)
 
         case_number_input = page.locator(
-            "#header_"
-            "CaseLocatorHeaderUC2_"
-            "BamaCaseNumberTextBoxHT"
+            'input[id$="CaseLocatorHeaderUC2_BamaCaseNumberTextBoxHT"]:visible, '
+            'input[name$="CaseLocatorHeaderUC2:BamaCaseNumberTextBoxHT"]:visible'
         )
 
         month_year_input = page.locator(
-            "#header_"
-            "CaseLocatorHeaderUC2_"
-            "BamaMonthYearTextBoxHT"
+            'input[id$="CaseLocatorHeaderUC2_BamaMonthYearTextBoxHT"]:visible, '
+            'input[name$="CaseLocatorHeaderUC2:BamaMonthYearTextBoxHT"]:visible'
         )
 
         search_button = page.locator(
-            "#header_"
-            "CaseLocatorHeaderUC2_"
-            "SearchHeaderCaseButton"
+            '[id$="CaseLocatorHeaderUC2_SearchHeaderCaseButton"]:visible, '
+            '[name$="CaseLocatorHeaderUC2:SearchHeaderCaseButton"]:visible'
         )
 
         await case_number_input.wait_for(
@@ -710,9 +716,27 @@ async def open_case_folder(
         print("URL:", page.url)
         print("Title:", await page.title())
 
+        # Detect website error responses before attempting extraction.
+        error_pattern = re.compile(
+            r"server error|runtime error|an error occurred|שגיאה|תקלה", re.I,
+        )
+        messages = page.locator(
+            '[role="alert"]:visible, .validation-summary-errors:visible, '
+            '[id*="Error"]:visible, [id*="error"]:visible'
+        )
+        for message in await messages.all_text_contents():
+            if message.strip():
+                raise CaseLookupError(message.strip())
+        if error_pattern.search(await page.title()) or (
+            not await page.locator('#browser').count()
+            and error_pattern.search(await page.locator('body').inner_text())
+        ):
+            raise CaseLookupError("The website returned an error page.")
+
         return page
 
     except BaseException:
         print("URL when lookup failed:", page.url)
-        await page.close()
+        if new_page:
+            await page.close()
         raise

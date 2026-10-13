@@ -24,7 +24,6 @@ The script prompts for:
 
 1. **Search date:** enter `DD/MM/YYYY`, or press Enter to use `DEFAULT_SEARCH_DATE` from `config.py` (currently `06/09/2026`).
 2. **Case-type filter:** enter `10078` for תה״ג or `10071` for ת״כ, or press Enter for no filter.
-3. **Maximum cases:** enter a positive integer, or press Enter to extract all matching cases.
 
 Chromium opens in a visible window by default. Progress, individual case results, and final status counts appear in the terminal.
 
@@ -34,14 +33,15 @@ Chromium opens in a visible window by default. Progress, individual case results
 | --- | --- | --- |
 | `--date DD/MM/YYYY` | Set the case-opening date to search. | Prompt for a date. |
 | `--case-type-id INTEGER` | Filter using the website's case-type option value. | Prompt; blank means no filter. |
-| `--max-cases INTEGER` | Limit both result collection and detail lookups. Must be positive. | Prompt; blank means all cases. |
 | `--output PATH` | Choose the JSON output file. | Timestamped file under `output/`. |
 | `--headless` | Run Chromium without a visible window. | Visible browser. |
+| `--resume PATH` | Load an existing checkpoint and save further progress to it; create it if missing. | New run. |
+| `--non-interactive` | Disable prompts; a new run requires `--date`, and an omitted type means all types. | Interactive prompts. |
 
-For example, search a date and extract up to five cases:
+For example, search a date and extract all matching cases:
 
 ```powershell
-python main.py --date 06/09/2026 --max-cases 5
+python main.py --date 06/09/2026
 ```
 
 This still prompts for the case-type filter. Press Enter to search without a filter.
@@ -49,7 +49,7 @@ This still prompts for the case-type filter. Press Enter to search without a fil
 To set every search option and choose an output file:
 
 ```powershell
-python main.py --date 06/09/2026 --case-type-id 10071 --max-cases 5 --output output/results.json --headless
+python main.py --date 06/09/2026 --case-type-id 10071 --output output/results.json --headless
 ```
 
 Choose one of these case-type filter values:
@@ -61,6 +61,38 @@ Choose one of these case-type filter values:
 
 The example above uses ת״כ (`10071`). Use `--case-type-id 10078` for תה״ג. `--headless` hides the browser but does not suppress prompts for omitted search options. An invalid date also triggers a correction prompt.
 
+## Resume and PM2
+
+Resume an existing file without redoing completed Sides extractions:
+
+```powershell
+python main.py --resume output/results.json --headless
+```
+
+The saved date, case-type filter, and case list are reused. Pending, in-progress,
+failed, and partial cases are retried, preserving previously extracted data.
+An already complete checkpoint exits without launching a browser. Invalid JSON
+is rejected without overwriting it. Resume loads the main JSON, not its `.tmp`
+file; an interrupted save may require retrying the last case.
+
+The included `ecosystem.config.cjs` runs one process, resumes the same checkpoint,
+and restarts after five seconds on failure or unfinished cases. It stops after
+all cases complete. Set the path to your existing checkpoint before starting:
+
+```powershell
+$env:CASE_CHECKPOINT = 'C:\path\to\existing\cases.json'
+pm2 start ecosystem.config.cjs
+pm2 logs case-scraper
+```
+
+If a process named `case-scraper` already exists, stop and remove its old PM2
+entry with `pm2 delete case-scraper` before starting this configuration.
+For a new checkpoint, set `CASE_DATE` to `DD/MM/YYYY` and optionally
+`CASE_TYPE_ID` before starting. `CASE_PYTHON` can select the Python executable
+with Playwright installed. The default checkpoint is `output/pm2_cases.json`.
+Keep one process per checkpoint file. A persistent website error leaves that
+case unfinished and will continue being retried on subsequent restarts.
+
 ## What main.py does
 
 1. Reads command-line arguments and prompts for missing search settings.
@@ -68,20 +100,12 @@ The example above uses ת״כ (`10071`). Use `--case-type-id 10078` for תה״ג
 3. Calls `open_results_page()` and `populate_cases()` from `court_search.py` to search and collect case records.
 4. Saves an initial checkpoint with all collected cases marked `pending`.
 5. Processes cases sequentially. For each case, it marks the entry `in_progress`, opens the case folder, and calls `GetCaseDetails()` from `case_details.py`.
-6. Saves the extracted data and status, closes that case's page, and continues to the next case even if a detail lookup fails.
+6. Saves the extracted data and status, then reuses the case page's header search for the next case. If a lookup returns a website error, closes that page and retries the same case once in a fresh page. Continues to the next case even if extraction fails.
 7. Records the finish time, saves the final checkpoint, prints status counts and the output location, and closes the browser.
 
-The detail scraper attempts to collect these tabs:
-
-- General details (`general_details`)
-- Parties (`sides`)
-- Representatives / power of attorney (`power_of_attorney`)
-- Hearing dates (`discussion_dates`)
-- Decisions (`decisions`)
-- Judgments (`judgments`)
-- Related cases (`related_cases`)
-
-Unavailable tabs can be skipped, so some cases may have partial results.
+`main.py` extracts only Factors → Sides (`sides`) for each case. A case is
+marked `completed` when this tab is collected, or `partial` if it is unavailable.
+Other callers of `GetCaseDetails()` still collect all supported tabs by default.
 
 ## Saved results
 
