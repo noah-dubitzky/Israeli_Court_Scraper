@@ -5,6 +5,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import json
+import sys
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pathlib import Path
@@ -37,7 +38,8 @@ def save_checkpoint(path: Path, run: dict) -> None:
 
 
 async def run_pipeline(context, date: str, case_type_id: int | None,
-                       output: Path, *, checkpoint: dict | None = None) -> dict:
+                       output: Path, *, checkpoint: dict | None = None,
+                       progress_to_stderr: bool = False) -> dict:
     search_page = None
     detail_page = None
     try:
@@ -66,6 +68,8 @@ async def run_pipeline(context, date: str, case_type_id: int | None,
             entry["error"] = None
             entry.pop("missing_tabs", None)
             save_checkpoint(output, run)
+            if progress_to_stderr:
+                print(f"Extracting case {index + 1}/{len(selected)}", file=sys.stderr, flush=True)
             print(f"\n[{index + 1}/{len(selected)}] Extracting {item.number}...", flush=True)
             try:
                 try:
@@ -131,6 +135,8 @@ def parse_args():
     parser.add_argument("--case-type-id", type=int, default=None)
     parser.add_argument("--output", type=Path, default=None)
     parser.add_argument("--headless", action="store_true")
+    parser.add_argument("--progress-to-stderr", action="store_true",
+                        help="Emit concise case progress even when stdout is suppressed.")
     parser.add_argument("--resume", type=Path, help="Resume this JSON file, or create it on the first run.")
     parser.add_argument("--non-interactive", action="store_true", help="Require --date; omitted case type means all types.")
     args = parser.parse_args()
@@ -192,7 +198,9 @@ async def main() -> None:
         browser = await p.chromium.launch(headless=args.headless)
         try:
             context = await browser.new_context()
-            result = await run_pipeline(context, args.date, args.case_type_id, output, checkpoint=checkpoint)
+            result = await run_pipeline(context, args.date, args.case_type_id, output,
+                                        checkpoint=checkpoint,
+                                        progress_to_stderr=args.progress_to_stderr)
             if any(entry["status"] != "completed" for entry in result["cases"]):
                 raise SystemExit(1)
         finally:

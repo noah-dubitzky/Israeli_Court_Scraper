@@ -93,6 +93,64 @@ with Playwright installed. The default checkpoint is `output/pm2_cases.json`.
 Keep one process per checkpoint file. A persistent website error leaves that
 case unfinished and will continue being retried on subsequent restarts.
 
+## Daily type-1 scraping on EC2 Linux
+
+Install Playwright in your Linux Python environment, including Chromium's system
+dependencies (`python3 -m playwright install --with-deps chromium`). Then run:
+
+```bash
+python3 scrape_daily.py
+```
+
+The runner starts on the EC2 system's current date, then goes backward one day
+at a time, passing `--case-type-id 1` to `main.py`. Each date runs in a fresh,
+headless Python/browser process. Files accumulate under `output/daily_type_1/`
+as `type_1_YYYY-MM-DD.json`; RAM is released as each child process exits.
+The daily runner logs the date and progress such as `Extracting case 3/300`.
+Case progress uses stderr, so PM2 includes it in its error log as well as the
+combined `pm2 logs` view. On resume, the counter uses the original case positions.
+Verbose scraper output is discarded; fatal errors and stop messages remain
+visible. Full scraped records are still saved in the JSON checkpoints.
+Type 1 is used literally as the website option value, not the first option.
+
+Before each date, the runner stops if free output disk space is below 512 MiB. These checks occur between runs;
+a single day's scrape can still exhaust resources. Exit status is 2 for a
+resource stop, 1 for a failed/unfinished daily run, and 0 for an optional day
+limit. A failed day stops progress so it can be retried on restart.
+
+For a short run or a specific starting date:
+
+```bash
+python3 scrape_daily.py --start-date 25/10/2026 --max-days 2
+```
+
+Use `--min-disk-mib` to adjust the free disk reserve. Restarting with
+the same output directory reuses daily checkpoints and skips completed cases.
+Keep the same explicit `--start-date` to retrace the same sequence after a
+restart. Run only one runner per output directory.
+
+To keep it running after disconnecting from SSH:
+
+```bash
+nohup python3 -u scrape_daily.py > daily_scraper.log 2>&1 &
+```
+
+Alternatively, run the daily runner with PM2 from the project directory:
+
+```bash
+CASE_PYTHON="$(command -v python3)" pm2 start ecosystem.daily.config.cjs
+pm2 logs case-scraper-daily
+```
+
+Activate your virtual environment first if you use one. This configuration runs
+one daily runner and disables automatic restarts, so low disk space or a failed
+day leaves it stopped. After resolving the problem, resume with
+`pm2 restart case-scraper-daily`. Stop it with `pm2 stop case-scraper-daily`.
+Optional environment variables before starting are `CASE_START_DATE`
+(`DD/MM/YYYY`), `CASE_OUTPUT_DIR`, and `CASE_MIN_DISK_MIB` (default `512`).
+The original `ecosystem.config.cjs` runs a single-date scraper; use
+`ecosystem.daily.config.cjs` for this daily loop.
+
 ## What main.py does
 
 1. Reads command-line arguments and prompts for missing search settings.

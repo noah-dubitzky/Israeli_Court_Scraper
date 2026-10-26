@@ -20,6 +20,6 @@ module.exports = {
     restart_delay: 5000,
     stop_exit_codes: [0],
     watch: false,
-    env: { PYTHONUNBUFFERED: '1' },
+    env: { PYTHONUNBUFFERED: '1', PYTHONIOENCODING: 'utf-8' },
   }],
 };
