@@ -137,18 +137,23 @@ async def search_cases_on_page(
     if case_type_id is not None and type(case_type_id) is not int:
         raise TypeError("case_type_id must be an integer or None.")
 
-    if case_type_id is not None:
-        await _select_case_type(page, case_type_id)
-
     # STEP 5 — ENTER DATE
     date_input = page.locator(
         "#openDateCalendar"
     )
 
-    await date_input.wait_for(
-        state="visible",
-        timeout=ELEMENT_TIMEOUT,
-    )
+    for attempt in range(2):
+        try:
+            await date_input.wait_for(state="visible", timeout=10000)
+            break
+        except PlaywrightTimeoutError:
+            print("Date input missing after 10 seconds; returning home.")
+            await open_court_page(page)
+            if attempt == 1:
+                raise
+
+    if case_type_id is not None:
+        await _select_case_type(page, case_type_id)
 
     print("Searching date:", new_date)
 

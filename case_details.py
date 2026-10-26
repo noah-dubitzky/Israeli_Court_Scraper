@@ -681,15 +681,22 @@ async def open_case_folder(
             '[name$="CaseLocatorHeaderUC2:SearchHeaderCaseButton"]:visible'
         )
 
-        await case_number_input.wait_for(
-            state="visible",
-            timeout=0 if disable_timeouts else ELEMENT_TIMEOUT,
-        )
-
-        await month_year_input.wait_for(
-            state="visible",
-            timeout=0 if disable_timeouts else ELEMENT_TIMEOUT,
-        )
+        for attempt in range(2):
+            try:
+                # Both inputs share one ten-second visibility deadline.
+                await asyncio.wait_for(
+                    asyncio.gather(
+                        case_number_input.wait_for(state="visible", timeout=0),
+                        month_year_input.wait_for(state="visible", timeout=0),
+                    ),
+                    timeout=10,
+                )
+                break
+            except (asyncio.TimeoutError, PlaywrightTimeoutError):
+                print("Case lookup inputs missing after 10 seconds; returning home.")
+                await open_court_page(page, disable_timeouts=disable_timeouts)
+                if attempt == 1:
+                    raise
 
         await search_button.wait_for(
             state="visible",
